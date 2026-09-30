@@ -75,7 +75,13 @@ def synthesize(text: str) -> Path:
 
 def _explain_error(e: Exception) -> str:
     status = getattr(e, "status_code", None)
-    if status == 401:
+    body = str(getattr(e, "body", ""))
+    if "api_key_id_used_as_api_key" in body:
+        return (
+            "Tu as colle l'ID de la cle, pas la cle elle-meme. La vraie cle commence par 'sk_' "
+            "et n'est affichee qu'une fois a sa creation : cree une nouvelle cle et copie-la tout de suite."
+        )
+    if status == 401 or "invalid_api_key" in body:
         return "Cle ElevenLabs refusee (401) : verifie ELEVENLABS_API_KEY dans .env."
     if status == 402:
         return (
@@ -86,7 +92,8 @@ def _explain_error(e: Exception) -> str:
         return "Voice ID introuvable (404) : verifie ELEVENLABS_VOICE_ID dans .env."
     if status == 429:
         return "Quota ElevenLabs depasse (429) : plus de caracteres disponibles ce mois-ci."
-    return f"Erreur ElevenLabs : {e}"
+    detail = getattr(e, "body", None) or e
+    return f"Erreur ElevenLabs ({status}) : {detail}"
 
 
 def play_file(path: Path) -> None:
