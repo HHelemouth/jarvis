@@ -72,6 +72,7 @@ NO_ACTIONS = (os.environ.get("JARVIS_SANS_ACTIONS") or "").strip().lower() in ("
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("jarvis")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # hide one line per ElevenLabs request
 
 
 # ---------------------------------------------------------------------------
