@@ -326,7 +326,7 @@ def wait_for_long_absence() -> None:
     last = time.time()
     last_idle = 0.0
     while True:
-        time.sleep(60)
+        time.sleep(10)  # short, so the mic is back within seconds when the PC wakes up
         now = time.time()
         idle = win.idle_seconds()
         gap = now - last
