@@ -357,3 +357,38 @@ def launch_outlook() -> None:
         os.startfile("outlookmail:")
     except OSError:
         log.error("Outlook introuvable sur ce PC.")
+
+
+# ---------------------------------------------------------------------------
+# Background mode helpers
+# ---------------------------------------------------------------------------
+
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+
+
+def idle_seconds() -> float:
+    """Time since the last keyboard or mouse input."""
+    info = LASTINPUTINFO()
+    info.cbSize = ctypes.sizeof(LASTINPUTINFO)
+    if not user32.GetLastInputInfo(ctypes.byref(info)):
+        return 0.0
+    ticks = kernel32.GetTickCount() & 0xFFFFFFFF
+    return ((ticks - info.dwTime) & 0xFFFFFFFF) / 1000.0
+
+
+kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+
+
+def process_running(pid: int, exe_name: str) -> bool:
+    """True if this PID is alive and is still the given program (PIDs get reused)."""
+    h = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not h:
+        return False
+    try:
+        code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(h, ctypes.byref(code)) or code.value != 259:  # STILL_ACTIVE
+            return False
+    finally:
+        kernel32.CloseHandle(h)
+    return _process_exe_name(pid) == exe_name.lower()

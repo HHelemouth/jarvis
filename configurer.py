@@ -3,6 +3,8 @@
     python configurer.py             -> ElevenLabs voice, then (optional) Microsoft
     python configurer.py voix        -> ElevenLabs voice only
     python configurer.py microsoft   -> Microsoft sign-in only (unread mails + Teams)
+    python configurer.py auto-on     -> start Jarvis with Windows (and start it now)
+    python configurer.py auto-off    -> stop starting with Windows (and stop it now)
 """
 
 from __future__ import annotations
@@ -94,6 +96,53 @@ def setup_microsoft() -> bool:
     return True
 
 
+STARTUP_LINK = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "Jarvis.lnk"
+
+
+def _stop_background() -> None:
+    import signal
+
+    import jarvis
+    import jarvis_windows
+
+    if not jarvis.background_running():
+        return
+    pid = int(jarvis.PID_FILE.read_text().strip())
+    if jarvis_windows.process_running(pid, "pythonw.exe"):
+        os.kill(pid, signal.SIGTERM)
+    jarvis.PID_FILE.unlink(missing_ok=True)
+    print("Jarvis en arriere-plan arrete.")
+
+
+def autostart_on() -> None:
+    import subprocess
+
+    import win32com.client
+
+    title("DEMARRAGE AUTOMATIQUE")
+    pythonw = ROOT / ".venv" / "Scripts" / "pythonw.exe"
+    STARTUP_LINK.parent.mkdir(parents=True, exist_ok=True)
+    shortcut = win32com.client.Dispatch("WScript.Shell").CreateShortCut(str(STARTUP_LINK))
+    shortcut.TargetPath = str(pythonw)
+    shortcut.Arguments = f'"{ROOT / "jarvis.py"}" --auto'
+    shortcut.WorkingDirectory = str(ROOT)
+    shortcut.Description = "Jarvis : double clap pour reveiller le bureau"
+    shortcut.save()
+    print("Jarvis se lancera tout seul a chaque demarrage de Windows.")
+
+    _stop_background()
+    subprocess.Popen([str(pythonw), str(ROOT / "jarvis.py"), "--auto"], cwd=ROOT)
+    print("Il tourne deja en arriere-plan : tu peux claquer des mains des maintenant.")
+    print("Apres un reveil, il coupe le micro et se rearme apres 4 h d'absence (nuit, veille).")
+
+
+def autostart_off() -> None:
+    title("DEMARRAGE AUTOMATIQUE")
+    STARTUP_LINK.unlink(missing_ok=True)
+    _stop_background()
+    print("Demarrage automatique desactive. Double-clique sur Jarvis quand tu en as besoin.")
+
+
 def main() -> int:
     load_dotenv(ENV_FILE)
     step = sys.argv[1] if len(sys.argv) > 1 else "tout"
@@ -108,6 +157,12 @@ def main() -> int:
                 print("Tu pourras le faire plus tard avec Connexion-Microsoft.bat.")
         if step == "microsoft":
             setup_microsoft()
+        if step == "auto-on":
+            autostart_on()
+            return 0
+        if step == "auto-off":
+            autostart_off()
+            return 0
     except (KeyboardInterrupt, EOFError):
         print("\nAnnule.")
         return 1

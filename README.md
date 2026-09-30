@@ -19,6 +19,8 @@ Au double clap :
 | `Jarvis-debug.bat` | Comme `Jarvis.bat`, avec l'affichage des niveaux. |
 | `Connexion-Microsoft.bat` | Connexion unique à Microsoft pour compter les mails et messages Teams. |
 | `Micros.bat` | Liste les micros du PC. |
+| `Demarrage-auto-ON.bat` | Jarvis se lance tout seul avec Windows, sans fenêtre. Après un réveil, il coupe le micro et se réarme après 4 h d'absence (nuit, veille). Journal : `.cache/jarvis.log`. |
+| `Demarrage-auto-OFF.bat` | Désactive le démarrage automatique et arrête Jarvis en arrière-plan. |
 
 ## Réglages possibles dans `.env`
 

@@ -299,12 +299,86 @@ def warm_voice_cache() -> None:
             return
 
 
+# ---------------------------------------------------------------------------
+# Background mode (started with Windows): wake the desk, then re-arm after a long absence
+# ---------------------------------------------------------------------------
+
+REARM_AFTER_S = 4 * 3600    # absence (no mouse/keyboard, or PC asleep) that re-arms Jarvis
+PID_FILE = Path(__file__).resolve().parent / ".cache" / "jarvis_auto.pid"
+LOG_FILE = Path(__file__).resolve().parent / ".cache" / "jarvis.log"
+
+
+def background_running() -> bool:
+    import jarvis_windows as win
+
+    try:
+        pid = int(PID_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return False
+    return pid != os.getpid() and win.process_running(pid, "pythonw.exe")
+
+
+def wait_for_long_absence() -> None:
+    """Keep the mic off until the user has been away for REARM_AFTER_S."""
+    import jarvis_windows as win
+
+    log.info("Micro coupe. Je me reveille apres %d h d'absence (nuit, veille...).", REARM_AFTER_S // 3600)
+    last = time.time()
+    last_idle = 0.0
+    while True:
+        time.sleep(60)
+        now = time.time()
+        idle = win.idle_seconds()
+        gap = now - last
+        # A long gap between two checks means the PC was asleep: the absence started before it.
+        away = last_idle + gap if gap > 300 else idle
+        if away >= REARM_AFTER_S:
+            break
+        last, last_idle = now, idle
+    log.info("Longue absence detectee : je t'ecoute de nouveau.")
+
+
+def run_in_background() -> int:
+    from logging.handlers import RotatingFileHandler
+
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%d/%m %H:%M:%S", force=True,
+        handlers=[RotatingFileHandler(LOG_FILE, maxBytes=300_000, backupCount=1, encoding="utf-8")],
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    if background_running():
+        log.info("Jarvis tourne deja en arriere-plan : je ne lance pas un deuxieme exemplaire.")
+        return 0
+    PID_FILE.write_text(str(os.getpid()))
+    log.info("Jarvis demarre en arriere-plan.")
+    threading.Thread(target=warm_voice_cache, daemon=True).start()
+    while True:
+        try:
+            heard = wait_for_double_clap()
+        except SystemExit:
+            heard = False
+        if not heard:
+            time.sleep(30)  # mic unavailable for now (e.g. just after boot): retry
+            continue
+        try:
+            wake_up_desk()
+        except Exception:
+            log.exception("Erreur pendant le reveil du bureau")
+        wait_for_long_absence()
+
+
 def main() -> int:
     if "--micros" in sys.argv:
         list_microphones()
         return 0
     if sys.platform != "win32":
         log.warning("Ce projet est configure pour Windows : seule l'ecoute des claps fonctionnera ici.")
+    elif "--auto" in sys.argv:
+        return run_in_background()
+    elif not NO_ACTIONS and background_running():
+        log.info("Jarvis tourne deja en arriere-plan (demarrage automatique) : claque simplement des mains !")
+        return 0
 
     threading.Thread(target=warm_voice_cache, daemon=True).start()
     if not wait_for_double_clap():
