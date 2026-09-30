@@ -7,7 +7,8 @@ Au double clap :
 1. La voix dit « Bon retour ! », puis annonce le nombre de mails non lus et de conversations Teams en attente.
 2. **Claude** (claude.ai) s'ouvre dans Edge, en plein écran sur l'**écran du milieu**.
 3. **Teams** (moitié gauche) et **Outlook** (moitié droite) s'ouvrent sur l'**écran de droite**.
-4. **FIP Groove** démarre dans une fenêtre Edge réduite.
+4. Une **vidéo YouTube** s'ouvre sans le son, en plein écran sur l'**écran de gauche**.
+5. **FIP Groove** démarre dans une fenêtre Edge réduite.
 
 ## Les fichiers à double-cliquer
 

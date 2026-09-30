@@ -37,6 +37,12 @@ TEAMS_PART = "left"      # "full", "left", "right", "top" or "bottom"
 OUTLOOK_SCREEN = 2
 OUTLOOK_PART = "right"
 
+# Video on the left screen: muted (FIP stays the music), video player in full screen.
+YOUTUBE_URL = "https://www.youtube.com/watch?v=DALTcNUGf5I"
+YOUTUBE_SCREEN = 0
+YOUTUBE_MUTED = True
+YOUTUBE_FULLSCREEN = True
+
 # Direct FIP Groove audio stream: plays without a click, unlike the radiofrance.fr page.
 RADIO_URL = "https://icecast.radiofrance.fr/fipgroove-midfi.mp3"
 
@@ -250,14 +256,21 @@ def wake_up_desk() -> None:
     edge_before = {w[0] for w in win.app_windows(win.EDGE_EXES)}
     results: dict = {}
 
-    def _claude():
+    def _edge_windows():
+        # One after the other, so each new Edge window is matched to the right page.
         results["claude"] = open_and_place(
             "Claude", lambda: win.open_edge_window(CLAUDE_URL), win.EDGE_EXES,
             CLAUDE_SCREEN, "full", exclude=edge_before, title_hint="claude",
         )
+        if YOUTUBE_URL:
+            taken = edge_before | {results["claude"]}
+            results["youtube"] = open_and_place(
+                "YouTube", lambda: win.open_edge_window(YOUTUBE_URL), win.EDGE_EXES,
+                YOUTUBE_SCREEN, "full", exclude=taken, title_hint="youtube",
+            )
 
     apps = [
-        threading.Thread(target=_claude),
+        threading.Thread(target=_edge_windows),
         threading.Thread(target=open_and_place, args=(
             "Teams", win.launch_teams, win.TEAMS_EXES, TEAMS_SCREEN, TEAMS_PART)),
         threading.Thread(target=open_and_place, args=(
@@ -280,9 +293,28 @@ def wake_up_desk() -> None:
     else:
         log.warning("FIP Groove : fenetre non trouvee, la radio s'ouvre quand meme dans Edge.")
 
+    if results.get("youtube"):
+        youtube_mute_and_fullscreen(results["youtube"])
     if results.get("claude"):
         win.bring_to_front(results["claude"])
     log.info("Bureau pret. Bonne session !")
+
+
+def youtube_mute_and_fullscreen(hwnd: int) -> None:
+    import jarvis_windows as win
+
+    if YOUTUBE_MUTED:
+        # Ctrl+M mutes the tab in Edge: silent whatever the player does.
+        if win.press_keys(hwnd, win.VK_CONTROL, ord("M")):
+            log.info("YouTube : onglet mis en sourdine.")
+        else:
+            log.warning("YouTube : impossible de couper le son (fenetre pas au premier plan).")
+    if YOUTUBE_FULLSCREEN:
+        # "f" is YouTube's own full-screen shortcut.
+        if win.press_keys(hwnd, ord("F")):
+            log.info("YouTube : video en plein ecran sur l'ecran %d.", YOUTUBE_SCREEN + 1)
+        else:
+            log.warning("YouTube : impossible de passer la video en plein ecran.")
 
 
 def warm_voice_cache() -> None:

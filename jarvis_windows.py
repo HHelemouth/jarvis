@@ -265,6 +265,26 @@ def bring_to_front(hwnd: int) -> None:
     user32.SetForegroundWindow(hwnd)
 
 
+user32.GetForegroundWindow.restype = wintypes.HWND
+
+VK_CONTROL = 0x11
+
+
+def press_keys(hwnd: int, *keys: int) -> bool:
+    """Type a shortcut (e.g. VK_CONTROL, ord("M")) into this window, only if it really has focus."""
+    for _ in range(3):
+        bring_to_front(hwnd)
+        time.sleep(0.4)
+        if (user32.GetForegroundWindow() or 0) == hwnd:
+            for k in keys:
+                user32.keybd_event(k, 0, 0, 0)
+            for k in reversed(keys):
+                user32.keybd_event(k, 0, KEYEVENTF_KEYUP, 0)
+            time.sleep(0.2)
+            return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Launching apps
 # ---------------------------------------------------------------------------
