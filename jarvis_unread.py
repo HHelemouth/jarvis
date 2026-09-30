@@ -149,8 +149,36 @@ def graph_unread_teams_chats(token: str, my_id: str) -> int:
 # Classic Outlook (COM)
 # ---------------------------------------------------------------------------
 
-def outlook_com_unread(wait_s: float) -> int | None:
-    """Ask a running classic Outlook for the inbox unread count, waiting for it to start."""
+def _com_inbox_unread(app, verbose: bool = True) -> int:
+    """Unread mails in the inbox of every account set up in Outlook."""
+    ns = app.GetNamespace("MAPI")
+    total = 0
+    seen: set[str] = set()
+    for account in ns.Accounts:
+        try:
+            store = account.DeliveryStore
+            if store.StoreID in seen:
+                continue
+            seen.add(store.StoreID)
+            n = int(store.GetDefaultFolder(6).UnReadItemCount)  # 6 = inbox
+        except Exception:
+            continue
+        if verbose:
+            log.info("Outlook : %s -> %d non lu(s) dans la boite de reception", account.DisplayName, n)
+        total += n
+    if not seen:
+        total = int(ns.GetDefaultFolder(6).UnReadItemCount)
+    return total
+
+
+def outlook_com_unread(wait_s: float, settle_s: float = 5.0, min_wait_s: float = 10.0) -> int | None:
+    """Ask classic Outlook for the unread count.
+
+    If Outlook was already open, answer at once. If it is just starting, it first has to
+    download the mails received while it was closed: give it min_wait_s, then keep reading
+    until the count stops moving for settle_s (or wait_s runs out), otherwise we would
+    announce a stale number.
+    """
     try:
         import pythoncom
         import win32com.client
@@ -159,15 +187,41 @@ def outlook_com_unread(wait_s: float) -> int | None:
     pythoncom.CoInitialize()
     try:
         deadline = time.monotonic() + wait_s
-        while True:
+        app = None
+        first_try = True
+        while app is None:
             try:
                 app = win32com.client.GetActiveObject("Outlook.Application")
-                inbox = app.GetNamespace("MAPI").GetDefaultFolder(6)  # 6 = inbox
-                return int(inbox.UnReadItemCount)
             except Exception:
                 if time.monotonic() >= deadline:
                     return None
+                first_try = False
                 time.sleep(0.5)
+
+        if first_try:
+            return _com_inbox_unread(app)
+
+        log.info("Outlook vient de demarrer : j'attends qu'il recupere les nouveaux mails...")
+        try:
+            app.GetNamespace("MAPI").SendAndReceive(False)
+        except Exception:
+            pass
+        value: int | None = None
+        started = changed_at = time.monotonic()
+        while True:
+            try:
+                current = _com_inbox_unread(app, verbose=False)
+            except Exception:
+                current = value
+            now = time.monotonic()
+            if current != value:
+                value, changed_at = current, now
+                log.info("Outlook : %s non lu(s) pour l'instant...", value)
+            elif value is not None and now - changed_at >= settle_s and now - started >= min_wait_s:
+                return _com_inbox_unread(app)
+            if now >= deadline:
+                return value
+            time.sleep(1.0)
     finally:
         pythoncom.CoUninitialize()
 

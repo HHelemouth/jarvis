@@ -49,7 +49,7 @@ PROGRAM = "Au programme : {items}. On attaque ?"
 NOTHING_UNREAD = "Boîte vide, rien ne t'arrête aujourd'hui."
 COUNTS_UNKNOWN = "On attaque ?"
 
-COUNTS_TIMEOUT_S = 12.0     # max wait for the unread counts before speaking without them
+COUNTS_TIMEOUT_S = 30.0     # max wait for the unread counts (Outlook needs time to sync when it was closed)
 WINDOW_TIMEOUT_S = 40.0     # max wait for an app window to appear (Teams can be slow)
 
 # ---------------------------------------------------------------------------
