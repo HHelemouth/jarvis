@@ -153,7 +153,38 @@ def list_microphones() -> None:
             print(f"  {i:3d} : {d['name']}  ({int(d['default_samplerate'])} Hz){mark}")
 
 
+def _reset_audio() -> None:
+    """Forget the audio devices PortAudio knew, so a mic that came back after sleep is found again."""
+    import sounddevice as sd
+
+    try:
+        sd._terminate()
+        sd._initialize()
+    except Exception as e:
+        log.warning("Reinitialisation audio : %s", e)
+
+
 def wait_for_double_clap() -> bool:
+    while True:
+        result = _listen_once()
+        if result == "double":
+            return True
+        if result == "stop":
+            return False
+        log.info("Micro relance (sortie de veille ou micro deconnecte).")
+        time.sleep(2)
+        _reset_audio()
+
+
+def _listen_once() -> str:
+    """Listen until a double clap ("double"), a stop ("stop"), or a dead audio stream ("restart").
+
+    After the PC sleeps, Windows can leave an open audio stream silent forever: audio is
+    received through a callback and watched, so a stalled stream is reopened instead of
+    leaving Jarvis deaf.
+    """
+    import queue
+
     import sounddevice as sd
 
     idx, name, rate = _choose_microphone()
@@ -165,6 +196,10 @@ def wait_for_double_clap() -> bool:
         max_gap_s=_env_float("JARVIS_MAX_GAP_S", 0.35),
     )
     detector = ClapDetector(settings, debug=DEBUG)
+    levels: queue.Queue = queue.Queue()
+
+    def _on_audio(indata, _frames, _time, _status):
+        levels.put(_rms(indata))
 
     log.info("Micro : [%d] %s a %d Hz", idx, name, rate)
     if DEBUG:
@@ -173,26 +208,33 @@ def wait_for_double_clap() -> bool:
     log.info("J'ecoute... Claque deux fois des mains. (Ctrl+C pour arreter)")
 
     try:
-        with sd.InputStream(device=idx, samplerate=rate, channels=1, dtype="float32", blocksize=block) as stream:
+        with sd.InputStream(device=idx, samplerate=rate, channels=1, dtype="float32",
+                            blocksize=block, callback=_on_audio):
             t = 0.0
+            last_wall = time.time()
             while True:
-                data, overflowed = stream.read(block)
-                if overflowed and DEBUG:
-                    log.info("(micro : quelques echantillons perdus)")
+                try:
+                    level = levels.get(timeout=3)
+                except queue.Empty:
+                    return "restart"  # no sound data at all for 3 s: the stream is dead
+                now = time.time()
+                if now - last_wall > 5:
+                    return "restart"  # the PC was asleep: start from a fresh stream
+                last_wall = now
                 t += block / rate
-                if detector.feed(_rms(data), t) == "double":
+                if detector.feed(level, t) == "double":
                     if NO_ACTIONS:
                         log.info(">>> DOUBLE CLAP DETECTE (mode test : aucune action, j'ecoute encore)")
                         continue
                     log.info(">>> DOUBLE CLAP DETECTE")
-                    return True
+                    return "double"
     except KeyboardInterrupt:
         log.info("Arrete.")
-        return False
+        return "stop"
     except sd.PortAudioError as e:
         log.error("Erreur micro : %s", e)
         log.error("Essaie une autre frequence avec JARVIS_SAMPLE_RATE=48000 (ou 44100) dans .env.")
-        return False
+        return "stop"
 
 
 # ---------------------------------------------------------------------------
