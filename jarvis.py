@@ -222,7 +222,7 @@ def fetch_counts(counts: dict, counts_ready: threading.Event) -> None:
         counts_ready.set()
 
 
-def open_and_place(label: str, launch, exes, screen: int, part: str, exclude=None, title_hint=None):
+def open_and_place(label: str, launch, exes, screen: int, part: str, exclude=None, title_hint=None, on_found=None):
     import jarvis_windows as win
 
     launch()
@@ -230,6 +230,8 @@ def open_and_place(label: str, launch, exes, screen: int, part: str, exclude=Non
     if not hwnd:
         log.warning("%s : fenetre introuvable, je la laisse ou Windows l'a mise.", label)
         return None
+    if on_found:
+        on_found(hwnd)
     rect = win.monitor_rect(screen)
     if rect is None:
         return hwnd
@@ -267,6 +269,7 @@ def wake_up_desk() -> None:
             results["youtube"] = open_and_place(
                 "YouTube", lambda: win.open_edge_window(YOUTUBE_URL), win.EDGE_EXES,
                 YOUTUBE_SCREEN, "full", exclude=taken, title_hint="youtube",
+                on_found=youtube_mute if YOUTUBE_MUTED else None,
             )
 
     apps = [
@@ -294,21 +297,26 @@ def wake_up_desk() -> None:
         log.warning("FIP Groove : fenetre non trouvee, la radio s'ouvre quand meme dans Edge.")
 
     if results.get("youtube"):
-        youtube_mute_and_fullscreen(results["youtube"])
+        youtube_fullscreen(results["youtube"])
     if results.get("claude"):
         win.bring_to_front(results["claude"])
     log.info("Bureau pret. Bonne session !")
 
 
-def youtube_mute_and_fullscreen(hwnd: int) -> None:
+def youtube_mute(hwnd: int) -> None:
+    """Mute the tab the moment its window appears, before the video starts playing."""
     import jarvis_windows as win
 
-    if YOUTUBE_MUTED:
-        # Ctrl+M mutes the tab in Edge: silent whatever the player does.
-        if win.press_keys(hwnd, win.VK_CONTROL, ord("M")):
-            log.info("YouTube : onglet mis en sourdine.")
-        else:
-            log.warning("YouTube : impossible de couper le son (fenetre pas au premier plan).")
+    # Ctrl+M mutes the tab in Edge: silent whatever the player does.
+    if win.press_keys(hwnd, win.VK_CONTROL, ord("M")):
+        log.info("YouTube : onglet mis en sourdine.")
+    else:
+        log.warning("YouTube : impossible de couper le son (fenetre pas au premier plan).")
+
+
+def youtube_fullscreen(hwnd: int) -> None:
+    import jarvis_windows as win
+
     if YOUTUBE_FULLSCREEN:
         # "f" is YouTube's own full-screen shortcut.
         if win.press_keys(hwnd, ord("F")):
