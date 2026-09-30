@@ -1,0 +1,7 @@
+numpy>=1.24,<3
+sounddevice>=0.4.6,<0.6
+elevenlabs>=2,<3
+python-dotenv>=1.0,<2
+msal>=1.28,<2
+requests>=2.31,<3
+pywin32>=306; sys_platform == "win32"
