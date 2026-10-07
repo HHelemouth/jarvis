@@ -5,7 +5,7 @@ Inspiré de [hectorg2211/jarvis](https://github.com/hectorg2211/jarvis), entièr
 Au double clap :
 
 1. La voix dit « Bon retour ! », puis annonce le nombre de mails non lus et de conversations Teams en attente.
-2. **Claude** (claude.ai) s'ouvre dans Edge, en plein écran sur l'**écran du milieu**.
+2. Le tableau **« Mes tickets Jira »** (artefact Claude) s'ouvre dans Edge, en plein écran sur l'**écran du milieu**.
 3. **Teams** (moitié gauche) et **Outlook** (moitié droite) s'ouvrent sur l'**écran de droite**.
 4. Une **vidéo YouTube** s'ouvre sans le son, en plein écran sur l'**écran de gauche**.
 5. **FIP Groove** démarre dans une fenêtre Edge réduite.

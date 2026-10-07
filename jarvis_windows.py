@@ -206,12 +206,12 @@ def wait_for_window(
 ) -> int | None:
     """Wait for a (new) main window of one of the executables to appear."""
     exclude = exclude or set()
-    hint = (title_hint or "").lower()
+    hints = [h for h in (title_hint or "").lower().split("|") if h]  # "a|b": either word
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         wins = [w for w in app_windows(exe_names) if w[0] not in exclude and w[2] >= min_area]
-        if hint:
-            hinted = [w for w in wins if hint in w[1].lower()]
+        if hints:
+            hinted = [w for w in wins if any(h in w[1].lower() for h in hints)]
             if hinted:
                 wins = hinted
             elif time.monotonic() < deadline - timeout / 2:
