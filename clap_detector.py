@@ -28,7 +28,8 @@ class ClapSettings:
     decay_ratio: float = 0.35      # level must fall under this fraction of the peak
     min_gap_s: float = 0.12        # min time between the two claps
     max_gap_s: float = 0.35        # max time between the two claps
-    min_flatness: float = 0.05     # below this the peak is a tone (chime, ringtone), not a clap
+    min_flatness: float = 0.0      # below this the peak is a tone (chime). Off: laptop mic arrays
+                                   # with noise suppression make real claps read as tones too.
     rearm_ratio: float = 0.5       # after a rejected sound, wait until level < threshold * this
     noise_alpha: float = 0.995     # smoothing of the background noise estimate
 

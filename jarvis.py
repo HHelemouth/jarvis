@@ -217,7 +217,7 @@ def _listen_once() -> str:
         decay_ratio=_env_float("JARVIS_DECAY_RATIO", 0.35),
         min_gap_s=_env_float("JARVIS_MIN_GAP_S", 0.12),
         max_gap_s=_env_float("JARVIS_MAX_GAP_S", 0.35),
-        min_flatness=_env_float("JARVIS_MIN_FLATNESS", 0.05),
+        min_flatness=_env_float("JARVIS_MIN_FLATNESS", 0.0),
     )
     detector = ClapDetector(settings, debug=DEBUG)
     levels: queue.Queue = queue.Queue()

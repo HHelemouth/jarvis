@@ -30,7 +30,7 @@ Au double clap :
 | Variable | Rôle |
 | -------- | ---- |
 | `JARVIS_MIN_RMS` | Niveau minimum d'un clap (0.28 par défaut). À baisser si tes claps sont « trop faibles ». |
-| `JARVIS_MIN_FLATNESS` | « Timbre » minimum d'un clap (0.05). Un clap est un bruit, une sonnerie est faite de notes (timbre proche de 0) : elle est ignorée. |
+| `JARVIS_MIN_FLATNESS` | « Timbre » minimum d'un clap (désactivé : 0). Sur un micro de PC portable qui filtre les bruits, un vrai clap a un timbre proche de 0 comme une sonnerie, donc ce filtre bloquerait les claps. |
 | `JARVIS_DECAY_RATIO` | Le son doit retomber sous cette part du pic en 100 ms (0.35). |
 | `JARVIS_MIN_GAP_S` / `JARVIS_MAX_GAP_S` | Écart autorisé entre les deux claps (0.12 à 0.35 s). |
 | `JARVIS_INPUT_DEVICE` | Numéro ou morceau du nom du micro à utiliser (voir `Micros.bat`). |
@@ -42,4 +42,4 @@ Au double clap :
 Le volume ne suffit pas : une voix atteint le même niveau qu'un clap. Jarvis regarde donc la **forme** du son.
 Quand un pic dépasse le seuil, il attend 100 ms : si le niveau est retombé sous 35 % du pic, c'est un clap.
 Sinon c'est de la voix ou de la musique, et c'est ignoré.
-Les sons musicaux (sonneries, carillons Teams) sont aussi écartés, et aucun double clap n'est pris en compte pendant qu'une autre appli utilise le micro (réunion en cours).
+Aucun double clap n'est pris en compte pendant qu'une autre appli utilise le micro (réunion en cours).
