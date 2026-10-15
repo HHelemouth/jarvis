@@ -412,3 +412,41 @@ def process_running(pid: int, exe_name: str) -> bool:
     finally:
         kernel32.CloseHandle(h)
     return _process_exe_name(pid) == exe_name.lower()
+
+
+MIC_CONSENT_KEY = r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
+
+
+def apps_using_microphone() -> list[str]:
+    """Other apps recording right now (Teams in a meeting...), as Windows tracks it for its mic icon."""
+    import winreg
+
+    busy: list[str] = []
+
+    def scan(path: str) -> None:
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, path)
+        except OSError:
+            return
+        with key:
+            i = 0
+            while True:
+                try:
+                    name = winreg.EnumKey(key, i)
+                except OSError:
+                    break
+                i += 1
+                if name == "NonPackaged":
+                    scan(path + "\\" + name)
+                    continue
+                try:
+                    with winreg.OpenKey(key, name) as app:
+                        start, _ = winreg.QueryValueEx(app, "LastUsedTimeStart")
+                        stop, _ = winreg.QueryValueEx(app, "LastUsedTimeStop")
+                except OSError:
+                    continue
+                if start and not stop and "python" not in name.lower():
+                    busy.append(name.replace("#", "\\").rsplit("\\", 1)[-1])
+
+    scan(MIC_CONSENT_KEY)
+    return busy

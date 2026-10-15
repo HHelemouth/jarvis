@@ -4,6 +4,10 @@ Volume alone is not enough: a voice or music reaches the same RMS level as a cla
 A clap collapses within ~100 ms, a voice or a song stays loud. So a peak above the
 threshold is only a candidate: we wait DECAY_S after the peak and require the level
 to have dropped under DECAY_RATIO * peak before counting it as a clap.
+
+A clap is also noise-like: its energy is spread over all frequencies. Chimes and
+ringtones (a Teams meeting starting) are made of pure notes. The spectral flatness of
+the peak (1 = pure noise, 0 = pure tone) must reach MIN_FLATNESS.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ class ClapSettings:
     decay_ratio: float = 0.35      # level must fall under this fraction of the peak
     min_gap_s: float = 0.12        # min time between the two claps
     max_gap_s: float = 0.35        # max time between the two claps
+    min_flatness: float = 0.05     # below this the peak is a tone (chime, ringtone), not a clap
     rearm_ratio: float = 0.5       # after a rejected sound, wait until level < threshold * this
     noise_alpha: float = 0.995     # smoothing of the background noise estimate
 
@@ -34,6 +39,7 @@ class _Candidate:
     peak: float
     peak_t: float
     threshold: float
+    flatness: float = 1.0
     after_max: float = 0.0  # loudest level seen inside the decay check window
 
 
@@ -54,12 +60,12 @@ class ClapDetector:
     def threshold(self) -> float:
         return max(self.s.min_rms, self.noise_floor * self.s.spike_ratio)
 
-    def feed(self, level: float, now: float) -> str | None:
+    def feed(self, level: float, now: float, flatness: float = 1.0) -> str | None:
         s = self.s
         threshold = self.threshold
 
         if self._cand is not None:
-            return self._follow_candidate(level, now)
+            return self._follow_candidate(level, now, flatness)
 
         if self._hold:
             if level < threshold * s.rearm_ratio:
@@ -68,7 +74,7 @@ class ClapDetector:
 
         if level >= threshold:
             self._flush_weak(threshold)
-            self._cand = _Candidate(onset=now, peak=level, peak_t=now, threshold=threshold)
+            self._cand = _Candidate(onset=now, peak=level, peak_t=now, threshold=threshold, flatness=flatness)
             return None
 
         self.noise_floor = s.noise_alpha * self.noise_floor + (1 - s.noise_alpha) * level
@@ -77,7 +83,7 @@ class ClapDetector:
             self._track_weak(level, threshold)
         return None
 
-    def _follow_candidate(self, level: float, now: float) -> str | None:
+    def _follow_candidate(self, level: float, now: float, flatness: float) -> str | None:
         s = self.s
         c = self._cand
         assert c is not None
@@ -86,6 +92,7 @@ class ClapDetector:
             if level > c.peak:
                 c.peak = level
                 c.peak_t = now
+                c.flatness = flatness
             return None
 
         since_peak = now - c.peak_t
@@ -96,15 +103,24 @@ class ClapDetector:
 
         self._cand = None
         ratio = c.after_max / c.peak if c.peak > 0 else 1.0
-        is_clap = c.after_max < s.decay_ratio * c.peak
+        decays = c.after_max < s.decay_ratio * c.peak
+        noisy = c.flatness >= s.min_flatness
+        is_clap = decays and noisy
+        if is_clap:
+            verdict = "CLAP"
+        elif not decays:
+            verdict = "rejete (voix ou musique : le son reste fort)"
+        else:
+            verdict = "rejete (son musical : sonnerie, notification...)"
         if self.debug:
             log.info(
-                "PIC  niveau=%.3f  seuil=%.3f  apres 100 ms=%.3f (%d %% du pic)  -> %s",
+                "PIC  niveau=%.3f  seuil=%.3f  apres 100 ms=%.3f (%d %% du pic)  timbre=%.3f  -> %s",
                 c.peak,
                 c.threshold,
                 c.after_max,
                 round(ratio * 100),
-                "CLAP" if is_clap else "rejete (voix ou musique : le son reste fort)",
+                c.flatness,
+                verdict,
             )
         if not is_clap:
             self._hold = True

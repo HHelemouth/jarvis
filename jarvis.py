@@ -165,6 +165,27 @@ def _reset_audio() -> None:
         log.warning("Reinitialisation audio : %s", e)
 
 
+def _flatness(samples, window) -> float:
+    """Spectral flatness: close to 1 for noise (a clap), close to 0 for notes (a chime)."""
+    import numpy as np
+
+    if samples.size != window.size:
+        return 1.0
+    power = np.abs(np.fft.rfft(samples * window))[1:] ** 2 + 1e-12
+    return float(np.exp(np.mean(np.log(power))) / np.mean(power))
+
+
+def _apps_in_a_call() -> list[str]:
+    if sys.platform != "win32":
+        return []
+    import jarvis_windows as win
+
+    try:
+        return win.apps_using_microphone()
+    except Exception:
+        return []
+
+
 def wait_for_double_clap() -> bool:
     while True:
         result = _listen_once()
@@ -186,6 +207,7 @@ def _listen_once() -> str:
     """
     import queue
 
+    import numpy as np
     import sounddevice as sd
 
     idx, name, rate = _choose_microphone()
@@ -195,12 +217,14 @@ def _listen_once() -> str:
         decay_ratio=_env_float("JARVIS_DECAY_RATIO", 0.35),
         min_gap_s=_env_float("JARVIS_MIN_GAP_S", 0.12),
         max_gap_s=_env_float("JARVIS_MAX_GAP_S", 0.35),
+        min_flatness=_env_float("JARVIS_MIN_FLATNESS", 0.05),
     )
     detector = ClapDetector(settings, debug=DEBUG)
     levels: queue.Queue = queue.Queue()
+    window = np.hanning(block)
 
     def _on_audio(indata, _frames, _time, _status):
-        levels.put(_rms(indata))
+        levels.put((_rms(indata), _flatness(indata[:, 0], window)))
 
     log.info("Micro : [%d] %s a %d Hz", idx, name, rate)
     if DEBUG:
@@ -215,7 +239,7 @@ def _listen_once() -> str:
             last_wall = time.time()
             while True:
                 try:
-                    level = levels.get(timeout=3)
+                    level, flatness = levels.get(timeout=3)
                 except queue.Empty:
                     return "restart"  # no sound data at all for 3 s: the stream is dead
                 now = time.time()
@@ -223,7 +247,15 @@ def _listen_once() -> str:
                     return "restart"  # the PC was asleep: start from a fresh stream
                 last_wall = now
                 t += block / rate
-                if detector.feed(level, t) == "double":
+                if detector.feed(level, t, flatness) == "double":
+                    if not NO_ACTIONS and sys.platform == "win32" and clap_test_running():
+                        log.info(">>> double clap ignore : le test des claps est ouvert.")
+                        continue
+                    busy = _apps_in_a_call()
+                    if busy:
+                        log.info(">>> double clap ignore : le micro est utilise par %s (reunion en cours ?)",
+                                 ", ".join(busy))
+                        continue
                     if NO_ACTIONS:
                         log.info(">>> DOUBLE CLAP DETECTE (mode test : aucune action, j'ecoute encore)")
                         continue
@@ -389,6 +421,18 @@ def warm_voice_cache() -> None:
 REARM_AFTER_S = 4 * 3600    # absence (no mouse/keyboard, or PC asleep) that re-arms Jarvis
 PID_FILE = Path(__file__).resolve().parent / ".cache" / "jarvis_auto.pid"
 LOG_FILE = Path(__file__).resolve().parent / ".cache" / "jarvis.log"
+TEST_FILE = Path(__file__).resolve().parent / ".cache" / "test_en_cours.pid"
+
+
+def clap_test_running() -> bool:
+    """True while Tester-les-claps is open: the background Jarvis must not wake the desk then."""
+    import jarvis_windows as win
+
+    try:
+        pid = int(TEST_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return False
+    return pid != os.getpid() and win.process_running(pid, "python.exe")
 
 
 def background_running() -> bool:
@@ -442,7 +486,11 @@ def run_in_background() -> int:
         except SystemExit:
             heard = False
         if not heard:
-            time.sleep(30)  # mic unavailable for now (e.g. just after boot): retry
+            # Just after logging in, Windows may not have the mic ready yet: wait, then
+            # make PortAudio look for devices again (it only lists them once otherwise).
+            log.info("Micro indisponible pour l'instant : nouvel essai dans 10 s.")
+            time.sleep(10)
+            _reset_audio()
             continue
         try:
             wake_up_desk()
@@ -463,9 +511,16 @@ def main() -> int:
         log.info("Jarvis tourne deja en arriere-plan (demarrage automatique) : claque simplement des mains !")
         return 0
 
+    if NO_ACTIONS and sys.platform == "win32":
+        TEST_FILE.parent.mkdir(parents=True, exist_ok=True)
+        TEST_FILE.write_text(str(os.getpid()))
     threading.Thread(target=warm_voice_cache, daemon=True).start()
-    if not wait_for_double_clap():
-        return 0
+    try:
+        if not wait_for_double_clap():
+            return 0
+    finally:
+        if NO_ACTIONS:
+            TEST_FILE.unlink(missing_ok=True)
     if sys.platform == "win32":
         wake_up_desk()
     return 0
