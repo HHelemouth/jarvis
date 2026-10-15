@@ -29,8 +29,8 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 # What opens, and where. Screens are counted from the left: 0 = left, 1 = middle, 2 = right.
 # ---------------------------------------------------------------------------
 
-# Claude artifact "Mes tickets Jira", opened instead of a new Claude chat.
-CLAUDE_URL = "https://claude.ai/artifact/6jPM5duQ178FkGBX94iaEz"
+# Claude artifact opened on the middle screen (shared link, its "sk" key is needed to open it).
+CLAUDE_URL = "https://claude.ai/artifact/4by1mXQGp5Qq6CxsmuGgxR?sk=WQVPMm_vPR4-f-iR1wnMTQ"
 CLAUDE_SCREEN = 1
 
 TEAMS_SCREEN = 2
@@ -336,8 +336,8 @@ def wake_up_desk() -> None:
     def _edge_windows():
         # One after the other, so each new Edge window is matched to the right page.
         results["claude"] = open_and_place(
-            "Tickets Jira", lambda: win.open_edge_window(CLAUDE_URL), win.EDGE_EXES,
-            CLAUDE_SCREEN, "full", exclude=edge_before, title_hint="jira|claude",
+            "Artefact Claude", lambda: win.open_edge_window(CLAUDE_URL), win.EDGE_EXES,
+            CLAUDE_SCREEN, "full", exclude=edge_before,
         )
         if YOUTUBE_URL:
             taken = edge_before | {results["claude"]}
