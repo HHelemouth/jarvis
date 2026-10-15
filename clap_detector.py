@@ -30,6 +30,7 @@ class ClapSettings:
     max_gap_s: float = 0.35        # max time between the two claps
     min_flatness: float = 0.0      # below this the peak is a tone (chime). Off: laptop mic arrays
                                    # with noise suppression make real claps read as tones too.
+    partner_ratio: float = 0.6     # one clap of the pair may be softer: down to threshold * this
     rearm_ratio: float = 0.5       # after a rejected sound, wait until level < threshold * this
     noise_alpha: float = 0.995     # smoothing of the background noise estimate
 
@@ -53,7 +54,7 @@ class ClapDetector:
         self.noise_floor = 0.005
         self._cand: _Candidate | None = None
         self._hold = False
-        self._first_clap: float | None = None
+        self._first_clap: tuple[float, bool] | None = None  # (time, loud enough on its own)
         # Debug-only tracking of peaks that stayed under the threshold.
         self._weak_max = 0.0
 
@@ -73,7 +74,7 @@ class ClapDetector:
                 self._hold = False
             return None
 
-        if level >= threshold:
+        if level >= threshold * s.partner_ratio:
             self._flush_weak(threshold)
             self._cand = _Candidate(onset=now, peak=level, peak_t=now, threshold=threshold, flatness=flatness)
             return None
@@ -107,8 +108,9 @@ class ClapDetector:
         decays = c.after_max < s.decay_ratio * c.peak
         noisy = c.flatness >= s.min_flatness
         is_clap = decays and noisy
+        strong = c.peak >= c.threshold
         if is_clap:
-            verdict = "CLAP"
+            verdict = "CLAP" if strong else "CLAP doux (compte seulement avec un clap fort)"
         elif not decays:
             verdict = "rejete (voix ou musique : le son reste fort)"
         else:
@@ -127,21 +129,27 @@ class ClapDetector:
             self._hold = True
             self._first_clap = None
             return None
-        return self._register_clap(c.onset)
+        return self._register_clap(c.onset, strong)
 
-    def _register_clap(self, t: float) -> str | None:
+    def _register_clap(self, t: float, strong: bool) -> str | None:
+        """Pair claps. At least one of the two must be loud on its own; the other may be softer."""
         s = self.s
         first = self._first_clap
-        if first is None or t - first > s.max_gap_s:
+        if first is None or t - first[0] > s.max_gap_s:
             if self.debug and first is not None:
-                log.info("     ecart %.2f s trop long (max %.2f s) : on repart de zero", t - first, s.max_gap_s)
-            self._first_clap = t
+                log.info("     ecart %.2f s trop long (max %.2f s) : on repart de zero", t - first[0], s.max_gap_s)
+            self._first_clap = (t, strong)
             return "clap"
-        gap = t - first
+        gap = t - first[0]
         if gap < s.min_gap_s:
             if self.debug:
                 log.info("     ecart %.2f s trop court (min %.2f s) : ignore", gap, s.min_gap_s)
             return None
+        if not (first[1] or strong):
+            if self.debug:
+                log.info("     deux claps doux : il en faut au moins un franc")
+            self._first_clap = (t, strong)
+            return "clap"
         self._first_clap = None
         if self.debug:
             log.info("     DOUBLE CLAP (ecart %.2f s)", gap)
