@@ -237,6 +237,7 @@ def _listen_once() -> str:
                             blocksize=block, callback=_on_audio):
             t = 0.0
             last_wall = time.time()
+            silent_since = last_wall
             while True:
                 try:
                     level, flatness = levels.get(timeout=3)
@@ -246,6 +247,13 @@ def _listen_once() -> str:
                 if now - last_wall > 5:
                     return "restart"  # the PC was asleep: start from a fresh stream
                 last_wall = now
+                # A real mic always picks up a little noise. Pure digital silence means Windows
+                # handed over a mic that is not ready yet (just after login) or switched off.
+                if level > 1e-6:
+                    silent_since = now
+                elif now - silent_since > 15:
+                    log.info("Micro muet depuis 15 s (pas encore pret ?) : je le relance.")
+                    return "restart"
                 t += block / rate
                 if detector.feed(level, t, flatness) == "double":
                     if not NO_ACTIONS and sys.platform == "win32" and clap_test_running():
